@@ -1,0 +1,138 @@
+// This #include statement was automatically added by the Particle IDE.
+#include <AssetTracker.h>
+
+//STARTUP(System.enableFeature(FEATURE_RETAINED_MEMORY));
+
+uint32_t wallabyTimer = millis();
+retained uint32_t wallabyCount = 0;
+String wallabyPublishString;
+
+// Set whether you want the device to publish data to the internet by default here.
+// 1 will Particle.publish AND Serial.print, 0 will just Serial.print
+// Extremely useful for saving data while developing close enough to have a cable plugged in.
+// You can also change this remotely using the Particle.function "tmode" defined in setup()
+int transmittingData = 1;
+
+AssetTracker t = AssetTracker();
+
+FuelGauge fuel;
+
+// Allows you to remotely change whether a device is publishing to the cloud
+// or is only reporting data over Serial. Saves data when using only Serial!
+// Change the default at the top of the code.
+int transmitMode(String command) {
+    transmittingData = atoi(command);
+    return 1;
+}
+
+
+/* This function is called once at start up ----------------------------------*/
+void setup() {
+	// Sets up all the necessary AssetTracker bits
+    //t.begin();
+
+    // Enable the GPS module. Defaults to off to save power.
+    // Takes 1.5s or so because of delays.
+    t.gpsOn();
+
+    // Opens up a Serial port so you can listen over USB
+    Serial.begin(115200);
+
+    // These three functions are useful for remote diagnostics. Read more below.
+    Particle.function("tmode", transmitMode);
+
+	//Setup the Tinker application here
+
+    pinMode(D0, INPUT);
+
+    Time.zone(-7);
+
+    wallabyTimer = millis(); // - 50000;
+
+}
+
+/* This function loops forever --------------------------------------------*/
+void loop() {
+	//This will run in a loop
+
+	t.updateGPS();
+
+
+
+    wallabyPublishString = "";
+
+    if (millis() - wallabyTimer > 1000) {
+        // wallabyCount++;
+    	// Serial.println(t.preNMEA());
+	    // Serial.println(t.readLatLon());
+
+        if (!t.gpsFix()) {
+            /*
+            wallabyPublishString =
+                "{\"d1\":\"" +  Time.timeStr() +
+                "\",\"d2\":\"" + wallabyCount +
+                "\",\"d3\":\"" + String::format("%.2f", fuel.getSoC()) +
+                "\",\"d4\":\"" + String::format("%.2f", fuel.getVCell()) +
+                "\",\"d5\":\"" + String(t.readLatLon()) +
+                "\"}";
+
+            if (transmittingData) {
+                //Particle.publish("Wallaby_Whereabouts", wallabyPublishString, 60, PRIVATE);
+            }
+            // Serial.println(String(wallabyCount) + ", " + t.readLatLon());
+            */
+        }
+        else {
+            wallabyCount++;
+            wallabyPublishString =
+                "{\"d1\":\"" +  Time.timeStr() +
+                "\",\"d2\":\"" + wallabyCount +
+                "\",\"d3\":\"" + String::format("%.2f", fuel.getSoC()) +
+                "\",\"d4\":\"" + String::format("%.2f", fuel.getVCell()) +
+                "\",\"d5\":\"" + t.readLatDeg() +
+                "\",\"d6\":\"" + t.readLonDeg() +
+                "\"}";
+            /*
+            while (!Cellular.ready()) {
+                delay(10);
+            }
+            */
+            Serial.println("Waiting for Particle to connect");
+            while (!Particle.connected()) {
+                delay(10);
+            }
+            Serial.println("Particle connected");
+            Serial.println("Starting to wait for 5 seconds");
+            uint32_t waitTime = millis();
+
+            while (millis() - waitTime <= 5000) {
+                delay(10);
+            }
+            Serial.println("5 seconds are up");
+            if (transmittingData) {
+                Serial.println("Sending data");
+                Particle.publish("Wallaby_Whereabouts", wallabyPublishString, 60, PRIVATE);
+            }
+            Serial.println(String(wallabyCount) + ", " + String(t.readLatDeg()) + ", " + String(t.readLonDeg()));
+
+
+        	if (!digitalRead(D0)) {
+        	    Serial.println("Turning off the GPS");
+        	    digitalWrite(D6, HIGH);
+        	    Serial.println("Starting to wait for 10 seconds");
+        	    uint32_t waitTime = millis();
+
+        	    while (millis() - waitTime <= 10000) {
+        	        delay(10);
+        	    }
+        	    Serial.println("10 seconds are up");
+        	    delay(50);
+        	    System.sleep(SLEEP_MODE_DEEP, 1800 - 120); // It takes 2 minutes to complete each wake cycle
+        	    //System.sleep(WKP, RISING, 1800, SLEEP_NETWORK_STANDBY);
+	        }
+	        digitalWrite(D6, LOW);
+	        wallabyTimer = millis();
+
+        }
+    }
+}
